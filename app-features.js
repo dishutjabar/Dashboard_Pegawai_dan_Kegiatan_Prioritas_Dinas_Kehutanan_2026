@@ -701,6 +701,7 @@ var drawnItems = new L.FeatureGroup();
 mapObj.addLayer(drawnItems);
 
 var drawControl = new L.Control.Draw({
+  position: 'bottomright',
   edit: { featureGroup: drawnItems },
   draw: {
     polyline: false,
