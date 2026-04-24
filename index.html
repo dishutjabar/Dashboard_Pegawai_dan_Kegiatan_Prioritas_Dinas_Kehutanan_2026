@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoHutan Jabar – Peta Sebaran Data Kehutanan</title>
+<meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js"></script>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<!-- Loader -->
+<div id="loader-overlay">
+  <div class="loader-spinner"></div>
+  <div id="loader-text">Memuat Data GeoHutan... 0%</div>
+</div>
+
+<div id="map"></div>
+
+<!-- Topbar -->
+<header id="topbar" class="glass-panel">
+  <div class="topbar-left">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" fill="rgba(46,125,50,0.1)" stroke="var(--primary)" stroke-width="1.5"/>
+      <polygon points="16,4 24,16 20,16 23,26 9,26 12,16 8,16" fill="var(--primary)" stroke="#fff" stroke-width="1"/>
+      <rect x="14" y="26" width="4" height="2" rx="1" fill="#5d4037"/>
+    </svg>
+    <div>
+      <div class="logo-text">GeoHutan Jabar</div>
+      <div class="logo-sub">Dinas Kehutanan Prov. Jawa Barat</div>
+    </div>
+  </div>
+  <div class="topbar-center">
+    <button class="cmd-btn" onclick="openCmdModal()">
+      <span>&#128269; Cari atau lompat ke...</span>
+      <kbd>Ctrl K</kbd>
+    </button>
+  </div>
+  <div class="topbar-right">
+    <div id="clock">00:00:00</div>
+    <button class="btn-icon" onclick="openTableModal()">&#128203; Tabel Data</button>
+    <button class="btn-icon" onclick="openSourceModal()">&#128240; Sumber Data</button>
+    <button class="btn-icon" onclick="openExportModal()">&#128196; Export</button>
+    <button class="btn-icon" onclick="goFullscreen()">&#9974; Fullscreen</button>
+  </div>
+</header>
+
+<!-- Sidebar Kiri -->
+<aside id="sidebar" class="glass-panel">
+  <div class="sidebar-tabs">
+    <button class="tab-btn active" onclick="switchTab('tab-filter')">&#9881; Filter</button>
+    <button class="tab-btn" onclick="switchTab('tab-stat')">&#128202; Statistik</button>
+    <button class="tab-btn" onclick="switchTab('tab-legend')">&#128205; Legenda</button>
+  </div>
+  
+  <div id="tab-filter" class="tab-content active fade-in">
+    <div class="filter-group"><label>CDK Wilayah</label><select id="f_cdk" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Unit Pegawai</label><select id="f_pegawai" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Kabupaten / Kota</label><select id="f_kab" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Status Persemaian</label><select id="f_status" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Kawasan Leuweung</label><select id="f_kawasan" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Jabatan Pegawai</label><select id="f_jabatan" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Nama Pegawai</label><select id="f_nama_pegawai" multiple="multiple"></select></div>
+    <div class="btn-row">
+      <button class="btn-apply" onclick="applyFilter()">Terapkan</button>
+      <button class="btn-reset" onclick="resetFilter()">Reset</button>
+    </div>
+    <div class="map-controls">
+      <label>Basemap: 
+        <select id="map-style" onchange="changeBasemap(this.value)">
+          <option value="satellite">Esri Satellite</option>
+          <option value="street">OSM Street</option>
+          <option value="topo">OpenTopoMap</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="toggle-cluster" checked onchange="toggleClustering()"> Aktifkan Clustering</label>
+      <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
+      <label><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
+      <button class="btn-icon" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
+    </div>
+  </div>
+
+  <div id="tab-stat" class="tab-content fade-in">
+    <div class="stat-card">
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Petugas Jaga Leuweung</div><div class="stat-val cg" id="cnt-pjl">0</div></div>
+      <div class="stat-icon">&#127794;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Persemaian Jaga Leuweung</div><div class="stat-val cb" id="cnt-per">0</div></div>
+      <div class="stat-icon">&#127807;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Pegawai Dinas Kehutanan</div><div class="stat-val co" id="cnt-peg">0</div></div>
+      <div class="stat-icon">&#128100;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Unggulan Jum'at Menanam</div><div class="stat-val cp" id="cnt-jum">0</div></div>
+      <div class="stat-icon">&#127793;</div>
+    </div>
+    
+    <div class="chart-title mt-3">Sebaran Data per Kategori</div>
+    <div class="chart-container"><canvas id="c-layer"></canvas></div>
+    <div class="chart-title">Status Persemaian</div>
+    <div class="chart-container"><canvas id="c-status"></canvas></div>
+    <div class="chart-title">PJL per CDK</div>
+    <div class="chart-container"><canvas id="c-cdk"></canvas></div>
+  </div>
+
+  <div id="tab-legend" class="tab-content fade-in">
+    <div class="leg-item" id="leg-pjl" onclick="toggleLayer('pjl')">
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><path d="M10,0 L20,4 L20,12 C20,18 10,24 10,24 C10,24 0,18 0,12 L0,4 Z" fill="#43a047" stroke="#fff" stroke-width="1.2"/><polygon points="10,6 15,14 11,14 11,18 9,18 9,14 5,14" fill="#fff"/></svg>
+      <span class="leg-text">Petugas Jaga Leuweung</span>
+    </div>
+    <div class="leg-item" id="leg-jum" onclick="toggleLayer('jum')">
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="#8e24aa" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>
+      <span class="leg-text">Lokasi Unggulan Jum'at Menanam</span>
+    </div>
+    <div class="leg-item" id="leg-peg" onclick="toggleLayer('peg')">
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><circle cx="10" cy="6" r="4" fill="#fb8c00" stroke="#fff" stroke-width="1.2"/><path d="M2,24 C2,16 18,16 18,24" fill="#fb8c00" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      <span class="leg-text">Pegawai Dinas Kehutanan</span>
+    </div>
+    <div class="leg-item" id="leg-per" onclick="toggleLayer('per')">
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#fff" stroke-width="1"/><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#1565c0" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span class="leg-text">Lokasi Persemaian Jaga Leuweung</span>
+    </div>
+  </div>
+</aside>
+
+<!-- Detail Drawer Kanan -->
+<aside id="detail-drawer" class="glass-panel">
+  <div class="drawer-head">
+    <h3 id="drawer-title">Detail Informasi</h3>
+    <div>
+      <button class="drawer-btn" id="drawer-min-btn" onclick="toggleMinimizeDrawer()" style="background:transparent; border:none; color:#fff; cursor:pointer; font-weight:bold; margin-right:8px;">&minus;</button>
+      <button class="close-drawer" onclick="closeDrawer()">&times;</button>
+    </div>
+  </div>
+  <div class="drawer-body" id="drawer-content">
+    <!-- Konten diisi dinamis via JS -->
+  </div>
+</aside>
+
+<!-- Modals -->
+<!-- 1. Command Palette Modal -->
+<div id="cmd-modal" class="modal-overlay" onclick="if(event.target==this) closeCmdModal()">
+  <div class="modal-content">
+    <input type="text" id="cmd-input" placeholder="Cari nama, lokasi, unit kerja (Ketik lalu Enter)..." autocomplete="off">
+    <div class="cmd-results" id="cmd-results"></div>
+  </div>
+</div>
+
+<!-- 2. Data Table Modal -->
+<div id="table-modal" class="modal-overlay" onclick="if(event.target==this) closeTableModal()">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h2>Tabel Data Keseluruhan</h2>
+      <button class="close-modal" onclick="closeTableModal()">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; height: 100%;">
+      <div class="table-toolbar">
+        <select id="table-layer-select" style="padding: 8px; border-radius: 6px;" onchange="renderTable()">
+          <option value="all">Semua Kategori</option>
+          <option value="pjl">Petugas Jaga Leuweung</option>
+          <option value="persemaian">Lokasi Persemaian Jaga Leuweung</option>
+          <option value="pegawai">Pegawai Dinas Kehutanan</option>
+          <option value="jumat">Lokasi Unggulan Jum'at Menanam</option>
+        </select>
+        <input type="text" id="table-search" placeholder="Cari dalam tabel..." onkeyup="filterTable()">
+      </div>
+      <div class="data-table-wrapper">
+        <table class="data-table" id="data-table">
+          <thead><tr><th>Kategori</th><th>Nama / Lokasi</th><th>Unit Kerja</th><th>Kab/Kota</th><th>Aksi</th></tr></thead>
+          <tbody id="data-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Manage Sources Modal -->
+<div id="source-modal" class="modal-overlay" onclick="if(event.target==this) closeSourceModal()">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-head">
+      <h2>Kelola Sumber Data (CSV / KMZ / URL)</h2>
+      <button class="close-modal" onclick="closeSourceModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 12px; margin-bottom: 15px; color: #666;">Anda dapat menambahkan data baru dari URL CSV (Google Sheets) atau unggah file CSV / KMZ lokal ke kategori tertentu.</p>
+      <div id="source-list" class="source-list">
+        <!-- List diisi dinamis -->
+      </div>
+      <div class="add-source-form">
+        <select id="new-source-type">
+          <option value="pjl">Petugas Jaga Leuweung</option>
+          <option value="jum">Lokasi Unggulan Jum'at Menanam</option>
+          <option value="peg">Pegawai Dinas Kehutanan</option>
+          <option value="per">Lokasi Persemaian Jaga Leuweung</option>
+        </select>
+        <input type="text" id="new-source-url" placeholder="URL CSV Publik..." style="flex:1;">
+        <button class="btn-apply" style="padding: 8px 15px; border-radius: 4px;" onclick="addSource()">Tambah URL</button>
+      </div>
+      <div class="add-source-form" style="margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
+        <input type="file" id="local-file-import" accept=".csv,.kmz,.kml" style="font-size:12px; flex:1;">
+        <button class="btn-apply" style="padding: 8px 15px; border-radius: 4px; background:#1e88e5;" onclick="importLocalFile()">Impor File</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Export Modal -->
+<div id="export-modal" class="modal-overlay" onclick="if(event.target==this) closeExportModal()">
+  <div class="modal-content" style="max-width: 400px;">
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+      <div style="font-size: 12px; margin-bottom: 5px; font-weight: 600;">Format File:</div>
+      <div style="display:flex; gap:15px; margin-bottom:10px;">
+        <label style="font-size:12px; cursor:pointer;"><input type="radio" name="export-fmt" value="csv" checked> CSV</label>
+        <label style="font-size:12px; cursor:pointer;"><input type="radio" name="export-fmt" value="xlsx"> XLSX (Excel)</label>
+      </div>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e8f5e9; border-color:#43a047;" onclick="exportCSV('pjl')">&#128196; Unduh Petugas Jaga Leuweung</button>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:#f3e5f5; border-color:#8e24aa;" onclick="exportCSV('jum')">&#128196; Download Lokasi Jum'at Menanam</button>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:#fff3e0; border-color:#fb8c00;" onclick="exportCSV('peg')">&#128196; Download Pegawai Dinas Kehutanan</button>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e3f2fd; border-color:#1e88e5;" onclick="exportCSV('per')">&#128196; Download Persemaian Jaga Leuweung</button>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:var(--primary); color:white; border-color:var(--primary);" onclick="exportAllFiltered()">&#128196; Unduh Semua Data Hasil Filter (CSV)</button>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Analysis Modal -->
+<div id="analysis-modal" class="modal-overlay" onclick="if(event.target==this) closeAnalysisModal()">
+  <div class="modal-content" style="max-width: 700px;">
+    <div class="modal-head">
+      <h2>Hasil Analisis Area Polygon</h2>
+      <button class="close-modal" onclick="closeAnalysisModal()">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; height: 100%;">
+      <div id="analysis-summary" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+        <!-- Filled via JS -->
+      </div>
+      <div class="data-table-wrapper" style="max-height: 400px;">
+        <table class="data-table" id="analysis-table">
+          <thead><tr><th>Kategori</th><th>Nama / Lokasi</th><th>Unit Kerja</th><th>Kab/Kota</th></tr></thead>
+          <tbody id="analysis-table-body"></tbody>
+        </table>
+      </div>
+      <div style="margin-top: 15px; text-align: right;">
+        <button class="btn-apply" onclick="clearDrawnPolygons()" style="padding: 10px 20px; border-radius: 6px; cursor: pointer; border: none;">Hapus Polygon & Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<script src="app-core.js"></script>
+<script src="app-features.js"></script>
+</body>
+</html>
