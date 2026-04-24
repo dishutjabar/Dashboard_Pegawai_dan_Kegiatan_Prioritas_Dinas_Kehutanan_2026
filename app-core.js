@@ -102,3 +102,22 @@ function getKab(lat, lng) {
   } catch (e) {}
   return '';
 }
+fetch('Jawa Barattt.geojson')
+  .then(res => res.json())
+  .then(data => {
+    GEO = data;
+
+    // tampilkan ke peta (opsional tapi penting)
+    L.geoJSON(GEO, {
+      style: {
+        color: "#2e7d32",
+        weight: 1,
+        fillOpacity: 0.1
+      }
+    }).addTo(mapObj);
+
+    console.log("GeoJSON berhasil dimuat");
+  })
+  .catch(err => {
+    console.error("Gagal load GeoJSON:", err);
+  });
